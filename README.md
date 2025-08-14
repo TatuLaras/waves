@@ -10,3 +10,4 @@ The executable will be in `build/example`.
 
 ## Usage
 (TBD) Will be added as the library evolves a bit futher to avoid duplicated work.
+In the meanwhile reading function descriptions in `include/waves.h` will go a long way.
