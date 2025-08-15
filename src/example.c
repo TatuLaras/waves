@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     waves_connect_waveforms(carrier, WAVES_OUTPUT);
 
     waves_waveform_set_envelope(carrier, (Envelope){
-                                             .attack = 0.1,
+                                             .attack = 1.0,
                                              .sustain = 0.6,
                                              .decay = 0.6,
                                              .release = 1.0,

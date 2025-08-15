@@ -76,29 +76,45 @@ void waves_connect_waveforms(WaveformHandle from, WaveformHandle to) {
     wfhandlevec_append(&wf->inputs, from);
 }
 
-static inline float calculate_envelope_multiplier(Envelope *envelope,
-                                                  Note *note) {
-    float time_elapsed = time - note->press_time;
+static inline float decay(Envelope *envelope, float time_since_press) {
+    float decay_amount =
+        (time_since_press - envelope->attack) / envelope->decay;
+    decay_amount = decay_amount > 1.0 ? 1.0 : decay_amount;
+    return 1.0 - (1.0 - envelope->sustain) * decay_amount;
+}
 
-    if (time_elapsed < envelope->attack)
-        return time_elapsed / envelope->attack;
+static inline float release_multiplier(Envelope *envelope, Note *note) {
+    float time_since_press = time - note->press_time;
+    float time_since_release = time - note->release_time;
 
-    if (note->release_time < note->press_time) {
-        float decay_amount =
-            (time_elapsed - envelope->attack) / envelope->decay;
-        decay_amount = decay_amount > 1.0 ? 1.0 : decay_amount;
-
-        return 1.0 - (1.0 - envelope->sustain) * decay_amount;
+    float current_level = envelope->sustain;
+    if (time_since_press < envelope->attack) {
+        current_level = time_since_press / envelope->attack;
+    } else if (time_since_press < envelope->attack + envelope->decay) {
+        current_level = decay(envelope, time_since_press);
     }
 
-    time_elapsed = time - note->release_time;
-    if (time_elapsed >= max_release) {
+    if (time_since_release >= max_release) {
         note->active = 0;
         return 0;
     }
 
-    float release_amount = fmax(0.0, 1.0 - time_elapsed / envelope->release);
-    return envelope->sustain * release_amount;
+    float release_amount =
+        fmax(0.0, 1.0 - time_since_release / envelope->release);
+    return current_level * release_amount;
+}
+
+static inline float calculate_envelope_multiplier(Envelope *envelope,
+                                                  Note *note) {
+    if (note->release_time > note->press_time)
+        return release_multiplier(envelope, note);
+
+    float time_since_press = time - note->press_time;
+
+    if (time_since_press < envelope->attack)
+        return time_since_press / envelope->attack;
+
+    return decay(envelope, time_since_press);
 }
 
 static float waveform_get_frame(WaveformHandle handle, Note *note,
