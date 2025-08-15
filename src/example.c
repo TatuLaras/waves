@@ -12,6 +12,8 @@ void data_callback(ma_device *pDevice, void *pOutput, const void *pInput,
                    ma_uint32 frameCount) {
     float *frames_out = (float *)pOutput;
     for (uint32_t i_frame = 0; i_frame < frameCount; i_frame += 1) {
+
+        // The only interaction with waves in this function
         float value = waves_get_frame();
 
         for (uint32_t i_channel = 0; i_channel < pDevice->playback.channels;
@@ -28,15 +30,33 @@ int main(int argc, char **argv) {
     waves_init(DEVICE_SAMPLE_RATE);
 
     WaveformHandle carrier =
-        waves_new_waveform(WAVES_WAVEFORM_SINE, 220, 0.2, 0);
+        waves_new_waveform(WAVES_WAVEFORM_SINE, 1.0, 0.2, 0);
 
-    WaveformHandle m1 =
-        waves_new_waveform(WAVES_WAVEFORM_SINE, 220.0 / 4, 0, 1.0);
-    WaveformHandle m2 = waves_new_waveform(WAVES_WAVEFORM_SINE, 220.0, 0, 0.2);
+    WaveformHandle m1 = waves_new_waveform(WAVES_WAVEFORM_SINE, 1.5, 0, 0.2);
+    WaveformHandle m2 = waves_new_waveform(WAVES_WAVEFORM_SINE, 0.5, 0, 6.0);
 
     waves_connect_waveforms(m1, carrier);
-    waves_connect_waveforms(m2, m1);
+    waves_connect_waveforms(m2, carrier);
     waves_connect_waveforms(carrier, WAVES_OUTPUT);
+
+    waves_waveform_set_envelope(carrier, (Envelope){
+                                             .attack = 0.1,
+                                             .sustain = 0.6,
+                                             .decay = 0.6,
+                                             .release = 1.0,
+                                         });
+    waves_waveform_set_envelope(m1, (Envelope){
+                                        .attack = 0.1,
+                                        .sustain = 0.4,
+                                        .decay = 0.3,
+                                        .release = 0.4,
+                                    });
+    waves_waveform_set_envelope(m2, (Envelope){
+                                        .attack = 0.1,
+                                        .sustain = 0.2,
+                                        .decay = 0.5,
+                                        .release = 0.4,
+                                    });
 
     ma_device_config deviceConfig;
     ma_device device;
@@ -60,8 +80,18 @@ int main(int argc, char **argv) {
         return -5;
     }
 
-    printf("Press Enter to quit...\n");
-    getchar();
+    printf("q+enter to quit\n");
+    printf("enter to toggle notes on and off\n");
+    while (1) {
+        waves_note_on(55, 1);
+        waves_note_on(62, 1);
+        if (getchar() == 'q')
+            break;
+        waves_note_off(55);
+        waves_note_off(62);
+        if (getchar() == 'q')
+            break;
+    }
 
     ma_device_uninit(&device);
 

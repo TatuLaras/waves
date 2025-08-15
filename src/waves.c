@@ -7,9 +7,14 @@ VEC_IMPLEMENT(Waveform, WaveformVec, wfvec)
 VEC_IMPLEMENT(WaveformHandle, WaveformHandleVec, wfhandlevec)
 
 static WaveformVec waveforms = {0};
-static double waveform_sample_rate = 0;
+static float waveform_sample_rate = 0;
+static float max_release = 0;
+static double time = 0;
 
-void waves_init(double sample_rate) {
+#define MIDI_NOTE_COUNT 128
+static Note notes[MIDI_NOTE_COUNT] = {0};
+
+void waves_init(float sample_rate) {
     assert(sample_rate);
 
     waveforms = wfvec_init();
@@ -24,24 +29,39 @@ void waves_init(double sample_rate) {
                              });
 
     waveform_sample_rate = sample_rate;
+
+    for (uint8_t i = 0; i < MIDI_NOTE_COUNT; i++) {
+        notes[i].frequency = 440.0 * pow(2, (float)(i - 69) / 12);
+    }
 }
 
-WaveformHandle waves_new_waveform(WaveformType type, double frequency,
-                                  double output_amplitude,
-                                  double modulation_amplitude) {
+WaveformHandle waves_new_waveform(WaveformType type, float frequency_ratio,
+                                  float output_amplitude,
+                                  float modulation_amplitude) {
     assert(waveforms.data);
     assert(waveform_sample_rate);
 
-    return wfvec_append(
-        &waveforms,
+    return wfvec_append(&waveforms,
 
-        (Waveform){
-            .output_amplitude = output_amplitude,
-            .modulation_amplitude = modulation_amplitude,
-            .type = type,
-            .advance_amount = (1.0 / (waveform_sample_rate / frequency)),
-            .inputs = wfhandlevec_init(),
-        });
+                        (Waveform){
+                            .output_amplitude = output_amplitude,
+                            .modulation_amplitude = modulation_amplitude,
+                            .type = type,
+                            .frequency_ratio = frequency_ratio,
+                            .inputs = wfhandlevec_init(),
+                            .envelope = {.sustain = 1.0},
+                        });
+}
+
+void waves_waveform_set_envelope(WaveformHandle handle, Envelope envelope) {
+    assert(handle);
+    assert(waveforms.data);
+
+    Waveform *wf = wfvec_get(&waveforms, handle);
+    assert(wf);
+
+    wf->envelope = envelope;
+    max_release = fmax(max_release, envelope.release);
 }
 
 void waves_connect_waveforms(WaveformHandle from, WaveformHandle to) {
@@ -56,8 +76,33 @@ void waves_connect_waveforms(WaveformHandle from, WaveformHandle to) {
     wfhandlevec_append(&wf->inputs, from);
 }
 
-static inline float waveform_get_frame(WaveformHandle handle,
-                                       int connected_to_output) {
+static inline float calculate_envelope_multiplier(Envelope *envelope,
+                                                  Note *note) {
+    float time_elapsed = time - note->press_time;
+
+    if (time_elapsed < envelope->attack)
+        return time_elapsed / envelope->attack;
+
+    if (note->release_time < note->press_time) {
+        float decay_amount =
+            (time_elapsed - envelope->attack) / envelope->decay;
+        decay_amount = decay_amount > 1.0 ? 1.0 : decay_amount;
+
+        return 1.0 - (1.0 - envelope->sustain) * decay_amount;
+    }
+
+    time_elapsed = time - note->release_time;
+    if (time_elapsed >= max_release) {
+        note->active = 0;
+        return 0;
+    }
+
+    float release_amount = fmax(0.0, 1.0 - time_elapsed / envelope->release);
+    return envelope->sustain * release_amount;
+}
+
+static float waveform_get_frame(WaveformHandle handle, Note *note,
+                                int use_output_amplitude) {
     assert(waveforms.data);
     assert(handle);
 
@@ -68,20 +113,25 @@ static inline float waveform_get_frame(WaveformHandle handle,
     for (size_t i = 0; i < wf->inputs.data_used; i++) {
         WaveformHandle *input_handle = wfhandlevec_get(&wf->inputs, i);
         assert(input_handle);
-        modulation += waveform_get_frame(*input_handle,
+        modulation += waveform_get_frame(*input_handle, note,
                                          wf->type == WAVES_WAVEFORM_OUTPUT);
     }
 
-    float value = 0;
-    float amplitude =
-        connected_to_output ? wf->output_amplitude : wf->modulation_amplitude;
+    float output_amplitude = 0;
+    float wf_amplitude =
+        use_output_amplitude ? wf->output_amplitude : wf->modulation_amplitude;
+
+    wf_amplitude *= calculate_envelope_multiplier(&wf->envelope, note);
 
     switch (wf->type) {
     case WAVES_WAVEFORM_OUTPUT:
-        value = modulation;
+        output_amplitude = modulation;
         break;
     case WAVES_WAVEFORM_SINE:
-        value = sin((wf->time + modulation) * 2 * M_PI) * amplitude;
+        output_amplitude =
+            sin(time * 2 * M_PI * note->frequency * wf->frequency_ratio +
+                modulation) *
+            wf_amplitude;
         break;
 
     case WAVES_WAVEFORM_TRIANGLE:
@@ -93,10 +143,33 @@ static inline float waveform_get_frame(WaveformHandle handle,
         break;
     }
 
-    wf->time += wf->advance_amount;
-    return value;
+    return output_amplitude;
+}
+
+void waves_note_on(uint8_t note, uint32_t velocity) {
+    assert(note < MIDI_NOTE_COUNT);
+    notes[note].velocity = velocity;
+    notes[note].active = 1;
+    notes[note].press_time = time;
+}
+
+void waves_note_off(uint8_t note) {
+    assert(note < MIDI_NOTE_COUNT);
+    notes[note].release_time = time;
 }
 
 float waves_get_frame(void) {
-    return waveform_get_frame(WAVES_OUTPUT, 0);
+    time += 1.0 / waveform_sample_rate;
+
+    float sample = 0;
+
+    for (uint8_t i = 0; i < MIDI_NOTE_COUNT; i++) {
+        if (notes[i].active) {
+            printf("note %u\n", i);
+            sample += waveform_get_frame(WAVES_OUTPUT, notes + i, 0);
+        }
+    }
+    printf("asd\n");
+
+    return sample;
 }
