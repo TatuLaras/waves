@@ -6,6 +6,7 @@ CFLAGS_DEBUG = $(CFLAGS) -DDEBUG -ggdb
 CFLAGS_ASAN = $(CFLAGS_DEBUG) $(SANITIZE)
 
 SRC = $(wildcard src/*.c) $(wildcard external/src/*.c)
+EXAMPLE_DIR = examples
 BUILD_DIR = build
 
 example: $(BUILD_DIR) $(BUILD_DIR)/example
@@ -16,10 +17,10 @@ run: $(BUILD_DIR) $(BUILD_DIR)/example
 run_asan: $(BUILD_DIR) $(BUILD_DIR)/example_asan
 	$(BUILD_DIR)/example_asan $(ARGS)
 
-$(BUILD_DIR)/example: $(SRC)
+$(BUILD_DIR)/example: $(SRC) $(EXAMPLE_DIR)/example.c
 	$(CC) -o $@ $^ $(CFLAGS_DEBUG)
 
-$(BUILD_DIR)/example_asan: $(SRC)
+$(BUILD_DIR)/example_asan: $(SRC) $(EXAMPLE_DIR)/example.c
 	$(CC) -o $@ $^ $(CFLAGS_ASAN)
 
 $(BUILD_DIR): 
