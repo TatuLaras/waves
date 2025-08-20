@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 VEC_IMPLEMENT(Waveform, WaveformVec, wfvec)
 VEC_IMPLEMENT(WaveformHandle, WaveformHandleVec, wfhandlevec)
@@ -162,7 +163,7 @@ static float waveform_get_frame(WaveformHandle handle, Note *note,
     return output_amplitude;
 }
 
-void waves_note_on(uint8_t note, uint32_t velocity) {
+void waves_note_on(uint8_t note, uint8_t velocity) {
     assert(note < MIDI_NOTE_COUNT);
     notes[note].velocity = velocity;
     notes[note].active = 1;
@@ -172,6 +173,11 @@ void waves_note_on(uint8_t note, uint32_t velocity) {
 void waves_note_off(uint8_t note) {
     assert(note < MIDI_NOTE_COUNT);
     notes[note].release_time = time;
+}
+
+void waves_all_notes_off(void) {
+    for (uint32_t i = 0; i < MIDI_NOTE_COUNT; i++)
+        notes[i].release_time = time;
 }
 
 float waves_get_frame(void) {

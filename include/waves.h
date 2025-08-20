@@ -80,8 +80,9 @@ void waves_waveform_set_envelope(WaveformHandle handle, Envelope envelope);
 // handle of which is the constant WAVES_OUTPUT.
 void waves_connect_waveforms(WaveformHandle from, WaveformHandle to);
 
-void waves_note_on(uint8_t note, uint32_t velocity);
+void waves_note_on(uint8_t note, uint8_t velocity);
 void waves_note_off(uint8_t note);
+void waves_all_notes_off(void);
 
 // Synthezises a single float32 mono pcm frame, using the waveform configuration
 // created using waves_new_waveform() and waves_connect_waveforms().
